@@ -24,6 +24,15 @@ PluginSettings {
     }
 
     // Flatpak Toggle (adds "isFlatpak": true/false to the JSON)
+
+    ToggleSetting {
+        settingKey: "isFlatpak"
+        label: "Obsidian as Flatpak"
+        description: "Enable if Obsidian is installed via Flatpak"
+        defaultValue: true
+    }
+
+    // Trigger
     ToggleSetting {
         id: noTriggerToggle
         settingKey: "noTrigger"
