@@ -7,6 +7,7 @@ PluginSettings {
     id: root
     pluginId: "dankObsidian"
 
+    // Header
     StyledText {
         width: parent.width
         text: "Obsidian Settings"
@@ -25,6 +26,14 @@ PluginSettings {
 
     // Flatpak Toggle (adds "isFlatpak": true/false to the JSON)
     ToggleSetting {
+        settingKey: "isFlatpak"
+        label: "Obsidian as Flatpak"
+        description: "Enable if Obsidian is installed via Flatpak"
+        defaultValue: true
+    }
+
+    // Trigger Toggle (adds "noTrigger": true/false to the JSON and conditionally shows the StringSetting)
+    ToggleSetting {
         id: noTriggerToggle
         settingKey: "noTrigger"
         label: "Always Active (No Trigger)"
@@ -39,6 +48,7 @@ PluginSettings {
         }
     }
 
+    // Trigger String (adds "trigger": "value" to the JSON)
     StringSetting {
         id: triggerSetting
         visible: !noTriggerToggle.value
