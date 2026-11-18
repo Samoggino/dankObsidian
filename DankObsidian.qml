@@ -13,27 +13,23 @@ QtObject {
     property bool isFlatpak: true
     property var cachedVaults: []
     property string homeDir: Quickshell.env("HOME") || "/home"
-    property string rawData: ""
     property bool enabled: true // Add this property
 
     property bool alwaysActive: false // New property
+    property var hiddenVaults: [] // Paths of vaults hidden from the launcher
+    property var vaultIcons: ({}) // path -> icon ("material:book", "unicode:📓", theme icon name)
 
-    // Using the Process component as it is the officially supported one
-    property var readProcess: Process {
-        command: ["cat", root.getStoragePath()]
-        running: false
+    property string lastVaultsKey: "" // Serialized vault list, used to notify the launcher only on real changes
+    property double lastReload: 0
 
-        stdout: SplitParser {
-            onRead: data => {
-                root.rawData += data;
-            }
-        }
-
-        onRunningChanged: {
-            if (!running) {
-                root.parseData();
-            }
-        }
+    // Watches obsidian.json: new/removed vaults show up without reloading the shell
+    property var vaultsFile: FileView {
+        path: root.getStoragePath()
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: root.parseData(text())
+        onLoadFailed: root.parseData("")
     }
 
     function getStoragePath() {
@@ -41,16 +37,14 @@ QtObject {
     }
 
     function refreshCache() {
-        root.rawData = "";
-        // Update the command before starting the process
-        root.readProcess.command = ["cat", root.getStoragePath()];
-        root.readProcess.running = true;
+        root.lastReload = Date.now();
+        root.vaultsFile.reload();
     }
 
-    function parseData() {
+    function parseData(rawData) {
+        let vaults = [];
         try {
-            const data = JSON.parse(root.rawData);
-            let vaults = [];
+            const data = rawData ? JSON.parse(rawData) : null;
             if (data && data.vaults) {
                 for (var key in data.vaults) {
                     let entry = data.vaults[key];
@@ -62,12 +56,18 @@ QtObject {
                     }
                 }
             }
-            root.cachedVaults = vaults;
-            root.itemsChanged();
         } catch (e) {
             console.warn("DankObsidian Error: " + e);
+            return; // keep the previous list on a partial/invalid read
         }
+        const vaultsKey = JSON.stringify(vaults);
+        if (vaultsKey === root.lastVaultsKey)
+            return;
+        root.lastVaultsKey = vaultsKey;
+        root.cachedVaults = vaults;
+        root.notifyLauncher();
     }
+
     function updateSettings() {
         if (root.pluginService) {
             // Read values from JSON
@@ -76,20 +76,21 @@ QtObject {
 
             // Logic for the trigger:
             // If "Always Active" is enabled, the JSON will have "trigger": ""
-            const newTrigger = root.pluginService.loadPluginData("dankObsidian", "trigger", "\obs");
+            const newTrigger = root.pluginService.loadPluginData("dankObsidian", "trigger", "\\obs");
 
             root.enabled = isEnabled;
             root.isFlatpak = newIsFlatpak;
             root.trigger = newTrigger;
+            const hidden = root.pluginService.loadPluginData("dankObsidian", "hiddenVaults", []);
+            root.hiddenVaults = (hidden && hidden.length !== undefined) ? Array.from(hidden) : [];
+            const icons = root.pluginService.loadPluginData("dankObsidian", "vaultIcons", {});
+            root.vaultIcons = (icons && typeof icons === "object") ? icons : {};
 
             console.log("DankObsidian Settings: Enabled =", root.enabled, "| Trigger =", root.trigger === "" ? "(Always Active)" : root.trigger);
 
-            if (!root.enabled) {
-                root.cachedVaults = [];
-                root.itemsChanged();
-            } else {
+            if (root.enabled)
                 root.refreshCache();
-            }
+            root.notifyLauncher(); // hidden vaults / icons may have changed
         }
     }
 
@@ -115,13 +116,57 @@ QtObject {
         if (!root.enabled)
             return []; // If the plugin is disabled, return nothing
 
+        // Fallback in case a file change notification was missed: re-read at most every 2s
+        if (Date.now() - root.lastReload > 2000)
+            Qt.callLater(root.refreshCache);
+
         const q = query ? query.trim().toLowerCase() : "";
-        return root.cachedVaults.filter(v => q === "" || v.name.toLowerCase().includes(q)).map(v => ({
+        return root.cachedVaults.filter(v => !root.hiddenVaults.includes(v.path) && (q === "" || v.name.toLowerCase().includes(q))).map(v => ({
                     name: v.name,
-                    icon: "obsidian",
+                    icon: (root.vaultIcons[v.path] || "").trim() || "obsidian",
                     comment: v.path,
-                    action: "open:" + v.path
+                    action: "open:" + v.path,
+                    vaultPath: v.path
                 }));
+    }
+
+    function notifyLauncher() {
+        root.itemsChanged();
+        if (root.pluginService && root.pluginService.requestLauncherUpdate)
+            root.pluginService.requestLauncherUpdate("dankObsidian");
+    }
+
+    function setVaultHidden(path, hidden) {
+        if (!path)
+            return;
+        let list = root.hiddenVaults.filter(p => p !== path);
+        if (hidden)
+            list.push(path);
+        root.hiddenVaults = list;
+        if (root.pluginService)
+            root.pluginService.savePluginData("dankObsidian", "hiddenVaults", list); // triggers updateSettings -> launcher refresh
+        else
+            root.notifyLauncher();
+    }
+
+    // Context menu shown in the launcher (right click / menu key on an item)
+    function getContextMenuActions(item) {
+        const path = item?.vaultPath || (item?.action || "").replace("open:", "");
+        if (!path)
+            return [];
+        return [
+            {
+                icon: "visibility_off",
+                text: "Hide vault",
+                action: () => root.setVaultHidden(path, true)
+            },
+            {
+                icon: "folder_open",
+                text: "Open folder",
+                closeLauncher: true,
+                action: () => Quickshell.execDetached(["xdg-open", path])
+            }
+        ];
     }
 
     function executeItem(item) {
