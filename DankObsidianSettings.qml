@@ -67,10 +67,15 @@ PluginSettings {
     property var hiddenVaults: []
     property var vaultIcons: ({})
 
+    // Hidden vaults and icons are kept in the plugin state (see DankObsidian.qml); the legacy
+    // settings values are only read as a fallback until the launcher has migrated them.
     function loadHidden() {
-        const h = root.loadValue("hiddenVaults", []);
+        const ps = root.pluginService;
+        if (!ps)
+            return;
+        const h = ps.loadPluginState("dankObsidian", "hiddenVaults", null) ?? root.loadValue("hiddenVaults", []);
         root.hiddenVaults = (h && h.length !== undefined) ? Array.from(h) : [];
-        const icons = root.loadValue("vaultIcons", {});
+        const icons = ps.loadPluginState("dankObsidian", "vaultIcons", null) ?? root.loadValue("vaultIcons", {});
         root.vaultIcons = (icons && typeof icons === "object") ? icons : {};
     }
 
@@ -92,7 +97,7 @@ PluginSettings {
         else
             delete map[path];
         root.vaultIcons = map;
-        root.saveValue("vaultIcons", map);
+        root.pluginService?.savePluginState("dankObsidian", "vaultIcons", map);
     }
 
     function setHidden(path, hidden) {
@@ -100,7 +105,7 @@ PluginSettings {
         if (hidden)
             list.push(path);
         root.hiddenVaults = list;
-        root.saveValue("hiddenVaults", list);
+        root.pluginService?.savePluginState("dankObsidian", "hiddenVaults", list);
     }
 
     property var vaultsFile: FileView {
@@ -128,12 +133,14 @@ PluginSettings {
 
     property var hiddenListener: Connections {
         target: root.pluginService
-        function onPluginDataChanged(pluginId) {
+        function onPluginStateChanged(pluginId) {
             if (pluginId === "dankObsidian")
                 root.loadHidden();
         }
     }
 
+    // DMS assigns pluginService after the page is created
+    onPluginServiceChanged: if (root.pluginService) Qt.callLater(root.loadHidden)
     Component.onCompleted: Qt.callLater(root.loadHidden)
 
     Column {

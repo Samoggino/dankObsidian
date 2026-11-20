@@ -81,10 +81,6 @@ QtObject {
             root.enabled = isEnabled;
             root.isFlatpak = newIsFlatpak;
             root.trigger = newTrigger;
-            const hidden = root.pluginService.loadPluginData("dankObsidian", "hiddenVaults", []);
-            root.hiddenVaults = (hidden && hidden.length !== undefined) ? Array.from(hidden) : [];
-            const icons = root.pluginService.loadPluginData("dankObsidian", "vaultIcons", {});
-            root.vaultIcons = (icons && typeof icons === "object") ? icons : {};
 
             console.log("DankObsidian Settings: Enabled =", root.enabled, "| Trigger =", root.trigger === "" ? "(Always Active)" : root.trigger);
 
@@ -94,7 +90,50 @@ QtObject {
         }
     }
 
-    Component.onCompleted: root.updateSettings()
+    // Hidden vaults and icons live in the plugin *state*, not in the settings: DMS reloads a
+    // launcher plugin (and rebuilds its settings page) on every settings save, which made the
+    // settings page empty itself and jump back to the top on each toggle or icon change.
+    function updateState() {
+        if (!root.pluginService)
+            return;
+        const hidden = root.pluginService.loadPluginState("dankObsidian", "hiddenVaults", []);
+        root.hiddenVaults = (hidden && hidden.length !== undefined) ? Array.from(hidden) : [];
+        const icons = root.pluginService.loadPluginState("dankObsidian", "vaultIcons", {});
+        root.vaultIcons = (icons && typeof icons === "object") ? icons : {};
+        root.notifyLauncher();
+    }
+
+    // One-time move of hiddenVaults / vaultIcons from the settings (v2.0.0) to the state
+    function migrateToState() {
+        const ps = root.pluginService;
+        if (!ps)
+            return;
+        const legacyHidden = ps.loadPluginData("dankObsidian", "hiddenVaults", null);
+        const legacyIcons = ps.loadPluginData("dankObsidian", "vaultIcons", null);
+        const hasHidden = legacyHidden && legacyHidden.length > 0;
+        const hasIcons = legacyIcons && typeof legacyIcons === "object" && Object.keys(legacyIcons).length > 0;
+        if (hasHidden) {
+            const current = Array.from(ps.loadPluginState("dankObsidian", "hiddenVaults", []) || []);
+            ps.savePluginState("dankObsidian", "hiddenVaults", Array.from(new Set(current.concat(Array.from(legacyHidden)))));
+        }
+        if (hasIcons) {
+            const current = ps.loadPluginState("dankObsidian", "vaultIcons", {}) || {};
+            ps.savePluginState("dankObsidian", "vaultIcons", Object.assign({}, legacyIcons, current));
+        }
+        if (hasHidden)
+            ps.savePluginData("dankObsidian", "hiddenVaults", []);
+        if (hasIcons)
+            ps.savePluginData("dankObsidian", "vaultIcons", {});
+    }
+
+    function init() {
+        root.migrateToState();
+        root.updateState();
+        root.updateSettings();
+    }
+
+    onPluginServiceChanged: root.init()
+    Component.onCompleted: root.init()
 
     property var settingsListener: Connections {
         target: root.pluginService
@@ -102,6 +141,10 @@ QtObject {
             if (pluginId === "dankObsidian") {
                 root.updateSettings();
             }
+        }
+        function onPluginStateChanged(pluginId) {
+            if (pluginId === "dankObsidian")
+                root.updateState();
         }
     }
 
@@ -144,7 +187,7 @@ QtObject {
             list.push(path);
         root.hiddenVaults = list;
         if (root.pluginService)
-            root.pluginService.savePluginData("dankObsidian", "hiddenVaults", list); // triggers updateSettings -> launcher refresh
+            root.pluginService.savePluginState("dankObsidian", "hiddenVaults", list); // triggers updateState -> launcher refresh
         else
             root.notifyLauncher();
     }

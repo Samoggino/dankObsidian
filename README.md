@@ -73,6 +73,11 @@ I designed this plugin with portability in mind:
 
 ## Changelog
 
+### 2.0.1
+
+* Fixed the settings page emptying itself and jumping back to the top when toggling a vault or changing its icon: hidden vaults and icons are now kept in the plugin state instead of the plugin settings (existing values are migrated automatically).
+* The vault list in the settings is shown as soon as the page opens.
+
 ### 2.0.0
 
 * Hide vaults from the launcher context menu or from the settings.
