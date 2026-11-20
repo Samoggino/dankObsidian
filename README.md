@@ -22,6 +22,8 @@ A launcher plugin for [DuxShell](https://duxlabs.dev/) (formerly [DankMaterialSh
 Type the trigger (default `\obs`) followed by part of the vault name, then press Enter to open it.
 Right click a vault (or press the menu key) to open its context menu:
 
+![Context menu](./screenshot-menu.png)
+
 | Action | What it does |
 |---|---|
 | **Hide vault** | Removes the vault from the launcher. Bring it back from the settings. |
