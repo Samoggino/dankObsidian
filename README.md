@@ -61,8 +61,9 @@ All changes apply to the launcher immediately.
 
 ## Requirements
 
-* **DuxShell / DankMaterialShell** with launcher plugin support.
+* **DuxShell / DankMaterialShell 2.0** or newer.
 * **Obsidian**: installed via Flatpak or natively (opened through `xdg-open`).
+* `xdg-open` (package `xdg-utils`), also used by *Open folder*.
 * For emoji icons: a color emoji font (e.g. Noto Color Emoji).
 
 ## How I Developed It
@@ -74,6 +75,10 @@ I designed this plugin with portability in mind:
 * The code has been tested exclusively on CachyOS with Hyprland, but it should work on any Linux distribution that supports Flatpak or `xdg-open`, and any compositor that supports Quickshell.
 
 ## Changelog
+
+### 2.0.2
+
+* Requires DMS 2.0 or newer (the settings page uses the DMS 2.0 widgets).
 
 ### 2.0.1
 
